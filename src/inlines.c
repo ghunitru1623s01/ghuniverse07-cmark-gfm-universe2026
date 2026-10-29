@@ -63,6 +63,7 @@ typedef struct subject{
   bufsize_t backticks[MAXBACKTICKS + 1];
   bool scanned_for_backticks;
   bool no_link_openers;
+  bufsize_t skip_liberal_until;
 } subject;
 
 // Extensions may populate this.
@@ -200,6 +201,7 @@ static void subject_from_buf(cmark_mem *mem, int line_number, int block_offset, 
   }
   e->scanned_for_backticks = false;
   e->no_link_openers = true;
+  e->skip_liberal_until = 0;
 }
 
 static CMARK_INLINE int isbacktick(int c) { return (c == '`'); }
@@ -1000,7 +1002,8 @@ static cmark_node *handle_pointy_brace(subject *subj, int options) {
     return node;
   }
 
-  if (options & CMARK_OPT_LIBERAL_HTML_TAG) {
+  if ((options & CMARK_OPT_LIBERAL_HTML_TAG) &&
+      subj->pos >= subj->skip_liberal_until) {
     matchlen = scan_liberal_html_tag(&subj->input, subj->pos);
     if (matchlen > 0) {
       contents = cmark_chunk_dup(&subj->input, subj->pos - 1, matchlen + 1);
@@ -1009,6 +1012,14 @@ static cmark_node *handle_pointy_brace(subject *subj, int options) {
       adjust_subj_node_newlines(subj, node, matchlen, 1, options);
       return node;
     }
+
+    // No '>' before the end of this line, so later '<' on the same line
+    // cannot match either; skip rescanning until the next line.
+    bufsize_t p = subj->pos;
+    while (p < subj->input.len && subj->input.data[p] != '\n' &&
+           subj->input.data[p] != '\0')
+      p++;
+    subj->skip_liberal_until = p;
   }
 
   // if nothing matches, just return the opening <:
