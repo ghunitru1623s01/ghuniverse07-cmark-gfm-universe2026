@@ -522,6 +522,24 @@ static void render_html(test_batch_runner *runner) {
   cmark_node_free(doc);
 }
 
+static void liberal_html_tag(test_batch_runner *runner) {
+  char *html = cmark_markdown_to_html("a<\n<b>ok</b>", 12,
+                                      CMARK_OPT_LIBERAL_HTML_TAG | CMARK_OPT_UNSAFE);
+  STR_EQ(runner, html, "<p>a&lt;\n<b>ok</b></p>\n",
+         "liberal html tag still matches on a later line");
+  free(html);
+
+  size_t n = 131072;
+  char *md = (char *)malloc(n + 1);
+  memset(md, '<', n);
+  md[n] = '\0';
+  html = cmark_markdown_to_html(md, n, CMARK_OPT_LIBERAL_HTML_TAG);
+  INT_EQ(runner, html != NULL && strlen(html) > 0, 1,
+         "long run of '<' with liberal html tag completes");
+  free(html);
+  free(md);
+}
+
 static void render_xml(test_batch_runner *runner) {
   char *xml;
 
@@ -1145,6 +1163,7 @@ int main() {
   hierarchy(runner);
   parser(runner);
   render_html(runner);
+  liberal_html_tag(runner);
   render_xml(runner);
   render_man(runner);
   render_latex(runner);
